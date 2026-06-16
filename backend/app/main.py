@@ -22,9 +22,9 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://healthanalyse.onrender.com"],
+    allow_origins=["*"], # On teste avec * pour lever tout doute
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
