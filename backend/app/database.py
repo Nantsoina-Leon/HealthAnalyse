@@ -2,11 +2,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import settings
 
-# Conversion pour compatibilité SQLite si nécessaire
-engine = create_engine(
-    settings.DATABASE_URL, 
-    connect_args={"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
-)
+# Connexion directe et standardisée à PostgreSQL
+engine = create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

@@ -11,7 +11,7 @@ import app.schemas as schemas
 import app.auth as auth
 from app.services.gemini import analyser_symptomes_ia, generer_reponse_chatbot
 
-# Création automatique des tables dans la base de données au démarrage
+# Création automatique des tables dans la base de données PostgreSQL au démarrage
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME, version="2026.1.0")
@@ -19,7 +19,7 @@ app = FastAPI(title=settings.PROJECT_NAME, version="2026.1.0")
 # Configuration du mécanisme CORS pour autoriser votre application React à communiquer avec l'API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En production, remplacez par le domaine de votre application React (ex: ["http://localhost:3000"])
+    allow_origins=["*"],  # En production, remplacez par le domaine de votre application React
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,7 +33,6 @@ app.add_middleware(
 def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)):
     """
     Inscrit un nouvel utilisateur de manière simplifiée.
-    Les allergies et antécédents médicaux sont gérés automatiquement par défaut à vide.
     """
     db_user = db.query(models.User).filter(models.User.email == user_in.email.lower()).first()
     if db_user:
@@ -82,8 +81,7 @@ def update_profile(
     db: Session = Depends(get_db)
 ):
     """
-    Permet de mettre à jour les données du profil et le dossier médical permanent (allergies/antécédents).
-    Génère un nouveau jeton JWT mis à jour à stocker côté frontend.
+    Permet de mettre à jour les données du profil et le dossier médical permanent.
     """
     if user_update.email and user_update.email.lower() != current_user.email:
         email_conflict = db.query(models.User).filter(models.User.email == user_update.email.lower()).first()
@@ -100,7 +98,6 @@ def update_profile(
         current_user.avatar = user_update.avatar
     if user_update.password: 
         current_user.hashed_password = auth.get_password_hash(user_update.password)
-        
 
     db.commit()
     db.refresh(current_user)
@@ -120,14 +117,11 @@ def launch_analysis(
     db: Session = Depends(get_db)
 ):
     """
-    Soumet les symptômes courants à l'IA Gemini en prenant en compte le profil médical persistant.
-    Archive automatiquement le résultat structuré en base de données.
+    Soumet les symptômes courants à l'IA Gemini et archive le résultat dans PostgreSQL.
     """
     try:
-        # Étape 1 : Appel du service d'IA structuré (Gemini 2.5)
         result_data = analyser_symptomes_ia(analysis_input, current_user)
         
-        # Étape 2 : Création de la ligne d'historique avec capture de l'état de santé à cet instant T
         new_history = models.DiagnosisHistory(
             user_id=current_user.id,
             age=analysis_input.age,
@@ -157,7 +151,7 @@ def get_history(
     db: Session = Depends(get_db)
 ):
     """
-    Récupère l'ensemble des diagnostics passés associés à l'utilisateur connecté.
+    Récupère l'ensemble des diagnostics passés associés à l'utilisateur connecté depuis PostgreSQL.
     """
     histories = db.query(models.DiagnosisHistory)\
                   .filter(models.DiagnosisHistory.user_id == current_user.id)\
@@ -221,7 +215,6 @@ def chat_message(
 ):
     """
     Endpoint de discussion avec le conseiller de santé virtuel MadaBot.
-    Garde en mémoire le contexte des échanges précédents.
     """
     try:
         reply = generer_reponse_chatbot(payload.text, payload.history, current_user)
