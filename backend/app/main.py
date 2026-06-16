@@ -1,4 +1,6 @@
 import json
+import asyncio  # 🚀 Ajouté pour gérer l'exécuteur asynchrone
+from concurrent.futures import ThreadPoolExecutor  # 🚀 Ajouté pour isoler les appels Gemini
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -16,10 +18,13 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME, version="2026.1.0")
 
+# Pool de threads dédié aux calculs lourds de Gemini (évite de figer le serveur)
+executor = ThreadPoolExecutor(max_workers=4)
+
 # Configuration du mécanisme CORS pour autoriser votre application React à communiquer avec l'API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://healthanalyse.onrender.com"],  # En production, remplacez par le domaine de votre application React
+    allow_origins=["https://healthanalyse.onrender.com"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -111,7 +116,7 @@ def update_profile(
 # =========================================================================
 
 @app.post("/api/analysis/launch", response_model=schemas.DiagnosisResult)
-def launch_analysis(
+async def launch_analysis(  # 🚀 Devenu async def
     analysis_input: schemas.DiagnosisInput, 
     current_user: models.User = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
@@ -120,7 +125,14 @@ def launch_analysis(
     Soumet les symptômes courants à l'IA Gemini et archive le résultat dans PostgreSQL.
     """
     try:
-        result_data = analyser_symptomes_ia(analysis_input, current_user)
+        # 🚀 Exécution sécurisée de l'appel Gemini synchrone dans un thread d'arrière-plan
+        loop = asyncio.get_running_loop()
+        result_data = await loop.run_in_executor(
+            executor, 
+            analyser_symptomes_ia, 
+            analysis_input, 
+            current_user
+        )
         
         new_history = models.DiagnosisHistory(
             user_id=current_user.id,
@@ -209,7 +221,7 @@ def clear_all_history(
 # =========================================================================
 
 @app.post("/api/chat/message")
-def chat_message(
+async def chat_message(  # 🚀 Devenu async def
     payload: schemas.ChatMessageInput, 
     current_user: models.User = Depends(auth.get_current_user)
 ):
@@ -217,7 +229,15 @@ def chat_message(
     Endpoint de discussion avec le conseiller de santé virtuel MadaBot.
     """
     try:
-        reply = generer_reponse_chatbot(payload.text, payload.history, current_user)
+        # 🚀 Évite également le timeout lors des longues réponses du Chatbot
+        loop = asyncio.get_running_loop()
+        reply = await loop.run_in_executor(
+            executor, 
+            generer_reponse_chatbot, 
+            payload.text, 
+            payload.history, 
+            current_user
+        )
         return {"reply": reply}
     except Exception as e:
         raise HTTPException(
