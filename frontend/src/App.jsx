@@ -39,7 +39,7 @@ import {
 } from 'lucide-react';
 
 // URL de base de votre API FastAPI
-const API_BASE_URL = "http://localhost:8000/api";
+const API_BASE_URL = "https://madadoc-backend.onrender.com/api";
 
 // Utilitaire de décodage manuel des claims du JWT
 const decodeJWT = (token) => {
