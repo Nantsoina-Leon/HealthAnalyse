@@ -19,7 +19,7 @@ app = FastAPI(title=settings.PROJECT_NAME, version="2026.1.0")
 # Configuration du mécanisme CORS pour autoriser votre application React à communiquer avec l'API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En production, remplacez par le domaine de votre application React
+    allow_origins=["https://healthanalyse.onrender.com"],  # En production, remplacez par le domaine de votre application React
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
