@@ -9,7 +9,6 @@ from app.database import get_db
 from app.models import User
 import bcrypt
 
-# Configuration du schéma de sécurité
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 def get_password_hash(password: str) -> str:
@@ -24,10 +23,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def generate_user_id() -> str:
     return f"usr_{uuid.uuid4().hex[:9]}"
 
-# 🚀 CORRECTION : Le token est désormais ultra-léger et sécurisé
+# 1. TOKEN LÉGER : On ne stocke que l'ID (sub)
 def create_access_token(user: User) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    # On ne stocke que l'ID. Plus de débordement de mémoire.
     to_encode = {
         "sub": user.id,
         "exp": int(expire.timestamp()),
@@ -35,7 +33,7 @@ def create_access_token(user: User) -> str:
     }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
-# 🚀 CORRECTION : On récupère les infos fraîches depuis la base de données
+# 2. RÉCUPÉRATION SÉCURISÉE : Avec gestion des champs None
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -45,14 +43,18 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
-        if user_id is None:
+        if not user_id:
             raise credentials_exception
     except jwt.PyJWTError:
         raise credentials_exception
         
-    # On va chercher l'utilisateur en base ici. 
-    # C'est beaucoup plus sûr et rapide que de transporter des données dans le token.
     user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
+    
+    if not user:
         raise credentials_exception
+    
+    # SÉCURITÉ : Assurer que les champs critiques ne sont jamais 'None' pour l'IA
+    if user.allergies is None: user.allergies = ""
+    if user.antecedents is None: user.antecedents = ""
+        
     return user
