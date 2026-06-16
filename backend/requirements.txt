@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+sqlalchemy
+bcrypt
+pydantic[email]
+pyjwt
+google-genai
+python-multipart
