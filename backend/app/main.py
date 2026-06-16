@@ -1,6 +1,6 @@
 import json
-import asyncio  # 🚀 Ajouté pour gérer l'exécuteur asynchrone
-from concurrent.futures import ThreadPoolExecutor  # 🚀 Ajouté pour isoler les appels Gemini
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -13,15 +13,13 @@ import app.schemas as schemas
 import app.auth as auth
 from app.services.gemini import analyser_symptomes_ia, generer_reponse_chatbot
 
-# Création automatique des tables dans la base de données PostgreSQL au démarrage
+# Création automatique des tables au démarrage
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title=settings.PROJECT_NAME, version="2026.1.0")
 
-# Pool de threads dédié aux calculs lourds de Gemini (évite de figer le serveur)
 executor = ThreadPoolExecutor(max_workers=4)
 
-# Configuration du mécanisme CORS pour autoriser votre application React à communiquer avec l'API
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["https://healthanalyse.onrender.com"],
@@ -35,10 +33,7 @@ app.add_middleware(
 # =========================================================================
 
 @app.post("/api/auth/register", response_model=schemas.UserResponse, status_code=status.HTTP_201_CREATED)
-def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)):
-    """
-    Inscrit un nouvel utilisateur de manière simplifiée.
-    """
+async def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)): # 🚀 Ajout de async
     db_user = db.query(models.User).filter(models.User.email == user_in.email.lower()).first()
     if db_user:
         raise HTTPException(
@@ -60,10 +55,7 @@ def register(user_in: schemas.UserRegister, db: Session = Depends(get_db)):
 
 
 @app.post("/api/auth/login", response_model=schemas.TokenResponse)
-def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
-    """
-    Authentifie l'utilisateur et retourne un jeton d'accès JWT réutilisable.
-    """
+async def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)): # 🚀 Ajout de async
     user = db.query(models.User).filter(models.User.email == credentials.email.lower()).first()
     if not user or not auth.verify_password(credentials.password, user.hashed_password):
         raise HTTPException(
@@ -80,14 +72,11 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
 # =========================================================================
 
 @app.put("/api/user/profile", response_model=schemas.TokenResponse)
-def update_profile(
+async def update_profile( # 🚀 Ajout de async (Régle l'erreur ERR_CONNECTION_CLOSED)
     user_update: schemas.UserUpdate, 
     current_user: models.User = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """
-    Permet de mettre à jour les données du profil et le dossier médical permanent.
-    """
     if user_update.email and user_update.email.lower() != current_user.email:
         email_conflict = db.query(models.User).filter(models.User.email == user_update.email.lower()).first()
         if email_conflict:
@@ -116,16 +105,12 @@ def update_profile(
 # =========================================================================
 
 @app.post("/api/analysis/launch", response_model=schemas.DiagnosisResult)
-async def launch_analysis(  # 🚀 Devenu async def
+async def launch_analysis( # 🚀 Reste en async def
     analysis_input: schemas.DiagnosisInput, 
     current_user: models.User = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """
-    Soumet les symptômes courants à l'IA Gemini et archive le résultat dans PostgreSQL.
-    """
     try:
-        # 🚀 Exécution sécurisée de l'appel Gemini synchrone dans un thread d'arrière-plan
         loop = asyncio.get_running_loop()
         result_data = await loop.run_in_executor(
             executor, 
@@ -158,13 +143,10 @@ async def launch_analysis(  # 🚀 Devenu async def
 
 
 @app.get("/api/analysis/history", response_model=List[schemas.HistoryResponse])
-def get_history(
+async def get_history( # 🚀 Ajout de async
     current_user: models.User = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """
-    Récupère l'ensemble des diagnostics passés associés à l'utilisateur connecté depuis PostgreSQL.
-    """
     histories = db.query(models.DiagnosisHistory)\
                   .filter(models.DiagnosisHistory.user_id == current_user.id)\
                   .order_by(models.DiagnosisHistory.date.desc()).all()
@@ -185,14 +167,11 @@ def get_history(
 
 
 @app.delete("/api/analysis/history/{history_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_history_item(
+async def delete_history_item( # 🚀 Ajout de async
     history_id: int, 
     current_user: models.User = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """
-    Supprime un élément spécifique de l'historique médical.
-    """
     item = db.query(models.DiagnosisHistory)\
              .filter(models.DiagnosisHistory.id == history_id, models.DiagnosisHistory.user_id == current_user.id).first()
     if not item:
@@ -205,13 +184,10 @@ def delete_history_item(
 
 
 @app.delete("/api/analysis/history", status_code=status.HTTP_204_NO_CONTENT)
-def clear_all_history(
+async def clear_all_history( # 🚀 Ajout de async
     current_user: models.User = Depends(auth.get_current_user), 
     db: Session = Depends(get_db)
 ):
-    """
-    Efface la totalité de l'historique des analyses du compte utilisateur connecté.
-    """
     db.query(models.DiagnosisHistory).filter(models.DiagnosisHistory.user_id == current_user.id).delete()
     db.commit()
 
@@ -221,15 +197,11 @@ def clear_all_history(
 # =========================================================================
 
 @app.post("/api/chat/message")
-async def chat_message(  # 🚀 Devenu async def
+async def chat_message(
     payload: schemas.ChatMessageInput, 
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    """
-    Endpoint de discussion avec le conseiller de santé virtuel MadaBot.
-    """
     try:
-        # 🚀 Évite également le timeout lors des longues réponses du Chatbot
         loop = asyncio.get_running_loop()
         reply = await loop.run_in_executor(
             executor, 
