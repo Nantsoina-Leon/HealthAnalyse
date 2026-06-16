@@ -1,7 +1,6 @@
 import jwt
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -10,48 +9,33 @@ from app.database import get_db
 from app.models import User
 import bcrypt
 
-# Configuration du schéma de sécurité OAuth2 standard
+# Configuration du schéma de sécurité
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
 def get_password_hash(password: str) -> str:
-    """
-    Hache le mot de passe en utilisant bcrypt natif.
-    """
-    password_bytes = password.encode('utf-8')
-    salt = bcrypt.gensalt()
-    hashed_bytes = bcrypt.hashpw(password_bytes, salt)
-    return hashed_bytes.decode('utf-8')
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Vérifie la correspondance entre le mot de passe en clair et le hash en BDD.
-    """
     try:
-        password_bytes = plain_password.encode('utf-8')
-        hashed_bytes = hashed_password.encode('utf-8')
-        return bcrypt.checkpw(password_bytes, hashed_bytes)
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
     except Exception:
         return False
 
 def generate_user_id() -> str:
     return f"usr_{uuid.uuid4().hex[:9]}"
 
+# 🚀 CORRECTION : Le token est désormais ultra-léger et sécurisé
 def create_access_token(user: User) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # On ne stocke que l'ID. Plus de débordement de mémoire.
     to_encode = {
         "sub": user.id,
-        "name": user.name,
-        "email": user.email,
-        "role": user.role,
-        "avatar": user.avatar,
-        "allergies": user.allergies,
-        "antecedents": user.antecedents,
         "exp": int(expire.timestamp()),
         "iat": int(datetime.now(timezone.utc).timestamp())
     }
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
+# 🚀 CORRECTION : On récupère les infos fraîches depuis la base de données
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -66,6 +50,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     except jwt.PyJWTError:
         raise credentials_exception
         
+    # On va chercher l'utilisateur en base ici. 
+    # C'est beaucoup plus sûr et rapide que de transporter des données dans le token.
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
