@@ -574,7 +574,9 @@ export default function MadadocAI() {
                 {currentUser.avatar ? (
                   <img src={currentUser.avatar} alt={currentUser.name} className="h-full w-full object-cover" />
                 ) : (
-                  <span className="font-bold text-slate-600 text-sm">{currentUser.name.charAt(0).toUpperCase()}</span>
+                  <span className="font-bold text-slate-600 text-sm">
+                    {currentUser?.name?.charAt(0)?.toUpperCase() || '?'}
+                  </span>
                 )}
               </div>
               <div className="hidden md:block text-left">
